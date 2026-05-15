@@ -67,7 +67,7 @@ void createBlock(int num) {
         gb.generateBlock(gb.block, O_Block_1, O_Block_2, O_Block_3, O_Block_4);
 }
 void setup() {
-    gb.begin(4);
+    gb.begin(8);
     randomSeed(analogRead(0) + analogRead(5));
     createBlock(random(0, 7));
 }
