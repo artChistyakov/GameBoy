@@ -1,142 +1,146 @@
-#include <GameBoy.h>
-#include "Blocks.h"
-GameBoy gb;
-int x = 2;
-int y = -1;
-int rot = 0;
+#include <Arduino.h> // Обов'язково для PlatformIO
+#include <QuantSensors.h> // Бібліотека датчиків Quant
 
-int speed = 200;
-int acc = 1;
-int score = 0;
-int level = 0;
+// Точні піни відповідно до шовкографії вашої плати Q 312
+#define MOTOR_L_PIN1 6   // Лівий мотор (D6)
+#define MOTOR_L_PIN2 5   // Лівий мотор (D5)
 
-void drawBlock(byte arr[4][4], int x, int y) {
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < 4; j++) {
-            if (arr[j][i] == 1) {
-                gb.drawPoint(x + i, y + j);
-            }
-        }
-    }
-}
-void makeMove() {
-    if (gb.getKey() == 4) {
-        if (!gb.checkBlockCollision(gb.block[rot], x - 1, y)) {
-            x--;
-        }
-    }
-    if (gb.getKey() == 5) {
-        if (!gb.checkBlockCollision(gb.block[rot], x + 1, y)) {
-            x++;
-        }
-    }
+#define MOTOR_R_PIN1 10  // Правий мотор (D10)
+#define MOTOR_R_PIN2 9   // Правий мотор (D9)
 
-    if (gb.getKey() == 1) {
-        if (!gb.checkBlockCollision(gb.block[rot], x + 1, y)) {
-            if (rot == 3) {
-                rot = 0;
-            } else {
-                rot++;
-            }
-        }
-    }
+// --- ПРОТОТИПИ ФУНКЦІЙ (для коректної компіляції в PlatformIO) ---
+void setSpeed(int level);
+void forward();
+void backward();
+void left();
+void right();
+void stp();
 
-    if (gb.getKey() == 6) {
-        acc = 4;
-    } else {
-        acc = 1;
-    }
-}
-void createBlock(int num) {
-    x = 2;
-    y = -1;
-    rot = random(0, 4);
-    if (num == 0)
-        gb.generateBlock(gb.block, I_Block_1, I_Block_2, I_Block_3, I_Block_4);
-    if (num == 1)
-        gb.generateBlock(gb.block, Z_Block_1, Z_Block_2, Z_Block_3, Z_Block_4);
-    if (num == 2)
-        gb.generateBlock(gb.block, S_Block_1, S_Block_2, S_Block_3, S_Block_4);
-    if (num == 3)
-        gb.generateBlock(gb.block, L_Block_1, L_Block_2, L_Block_3, L_Block_4);
-    if (num == 4)
-        gb.generateBlock(gb.block, J_Block_1, J_Block_2, J_Block_3, J_Block_4);
-    if (num == 5)
-        gb.generateBlock(gb.block, T_Block_1, T_Block_2, T_Block_3, T_Block_4);
-    if (num == 6)
-        gb.generateBlock(gb.block, O_Block_1, O_Block_2, O_Block_3, O_Block_4);
-}
+// Калібрувальні коефіцієнти швидкості (за потреби змініть для рівного ходу)
+float motor_a_koef = 1.0;
+float motor_b_koef = 0.78;
+
+// Поточні робочі швидкості двигунів
+int speed_A = 150;
+int speed_B = 150;
+
+QuantLine line;
+
 void setup() {
-    gb.begin(4);
-    randomSeed(analogRead(0) + analogRead(5));
-    createBlock(random(0, 7));
-}
+  Serial.begin(9600);
+  
+  // Ініціалізація датчиків лінії
+  line.begin(true);    
+  line.setLevel(100);  
 
-bool loss() {
-    if (gb.checkBlockCollision(gb.block[rot], x, 0)) {
-        return true;
-    } else {
-        return false;
-    }
+  // Налаштування пінів двигунів на вихід
+  pinMode(MOTOR_L_PIN1, OUTPUT);
+  pinMode(MOTOR_R_PIN1, OUTPUT);
+  
+  // Встановлюємо середню швидкість руху (рівень 6 з 10)
+  setSpeed(6); 
+  
+  // Початкова зупинка перед стартом
+  stp();
+  delay(2000); // Пауза 2 секунди, щоб встигнути поставити робота на підлогу
 }
-
-bool win() {
-    if (score >= 20) {
-        return true;
-    }
-    return false;
-}
-
 
 void loop() {
-    if (loss() == true) {
-        Serial.println("You lost the game");
-    }
+  Serial.println("--- Початок циклу руху ---");
 
-    if (loss() == true) {
-        for (int i = 0; i < 8; i++) {
-            for (int j = 0; j < 16; j++) {
-                gb.wipePoint(i, j);
-            }
-        }
-        gb.sound(COLLISION);
-        gb.testMatrix(10);
-    }
+  // 1. Рух вперед протягом 2 секунд
+  Serial.println("Рух вперед...");
+  forward();
+  delay(2000);
 
-    if (win() == true) {
+  // Зупинка на 1 секунду
+  Serial.println("Зупинка...");
+  stp();
+  delay(1000);
 
-        for (int i = 0; i < 8; i++) {
-            for (int j = 0; j < 16; j++) {
-                gb.wipePoint(i, j);
-                gb.setLed(i, j, WIN[j][i]);
-            }
-        }
-        delay(2000);
-        gb.clearDisplay();
-        score = 0;
-        level = 0;
-    }
-    makeMove();
-    if (gb.checkBlockCollision(gb.block[rot], x, y + 1)) {
-        gb.memBlock(gb.block[rot], x, y);
-        int lines = gb.fullLine();
+  // 2. Рух назад протягом 2 секунд
+  Serial.println("Рух назад...");
+  backward();
+  delay(2000);
 
-        if (lines != 0) {
-            score += lines;
-            level += lines;
-        }
+  // Зупинка на 1 секунду
+  Serial.println("Зупинка...");
+  stp();
+  delay(1000);
 
-        if (level >= 5) {
-            gb.sound(SCORE);
-            acc += 1;
-            level = 0;
-        }
-        createBlock(random(0, 7));
-    }
-    else {
-        y++;
-    }
-    gb.drawDisplay();
-    drawBlock(gb.block[rot], x, y);
-    delay(speed / acc);
+  // 3. Поворот ліворуч на місці протягом 1.5 секунди
+  Serial.println("Поворот ліворуч...");
+  left();
+  delay(1500);
+
+  // Зупинка на 1 секунду
+  Serial.println("Зупинка...");
+  stp();
+  delay(1000);
+
+  // 4. Поворот праворуч на місці протягом 1.5 секунди
+  Serial.println("Поворот праворуч...");
+  right();
+  delay(1500);
+
+  // Довга зупинка на 3 секунди перед повторенням всього циклу
+  Serial.println("Очікування перед наступним циклом...");
+  stp();
+  delay(3000); 
+}
+
+// --- РЕАЛІЗАЦІЯ ФУНКЦІЙ КЕРУВАННЯ ---
+
+// Функція розрахунку швидкості з урахуванням коефіцієнтів
+void setSpeed(int level) {
+  int base = map(level, 0, 10, 0, 255);
+  speed_A = base * motor_a_koef;
+  speed_B = base * motor_b_koef;
+}
+
+void forward() {
+  // Лівий двигун вперед (D6 = LOW, D5 = PWM)
+  digitalWrite(MOTOR_L_PIN1, LOW);
+  analogWrite(MOTOR_L_PIN2, speed_A);
+  
+  // Правий двигун вперед (D10 = HIGH, D9 = PWM із інверсією 255-speed) [7]
+  digitalWrite(MOTOR_R_PIN1, HIGH);
+  analogWrite(MOTOR_R_PIN2, 255 - speed_B);
+}
+
+void backward() {
+  // Лівий двигун назад (D6 = HIGH, D5 = PWM із інверсією 255-speed) [7]
+  digitalWrite(MOTOR_L_PIN1, HIGH);
+  analogWrite(MOTOR_L_PIN2, 255 - speed_A);
+  
+  // Правий двигун назад (D10 = LOW, D9 = PWM) [7]
+  digitalWrite(MOTOR_R_PIN1, LOW);
+  analogWrite(MOTOR_R_PIN2, speed_B);
+}
+
+void left() {
+  // Розворот ліворуч (Лівий назад, Правий вперед)
+  digitalWrite(MOTOR_L_PIN1, HIGH);
+  analogWrite(MOTOR_L_PIN2, 255 - speed_A);
+  
+  digitalWrite(MOTOR_R_PIN1, HIGH);
+  analogWrite(MOTOR_R_PIN2, 255 - speed_B);
+}
+
+void right() {
+  // Розворот праворуч (Лівий вперед, Правий назад)
+  digitalWrite(MOTOR_L_PIN1, LOW);
+  analogWrite(MOTOR_L_PIN2, speed_A);
+  
+  digitalWrite(MOTOR_R_PIN1, LOW);
+  analogWrite(MOTOR_R_PIN2, speed_B);
+}
+
+void stp() {
+  // Активне гальмування двигунів (на обидва канали подається HIGH)
+  digitalWrite(MOTOR_L_PIN1, HIGH);
+  analogWrite(MOTOR_L_PIN2, 255);
+  
+  digitalWrite(MOTOR_R_PIN1, HIGH);
+  analogWrite(MOTOR_R_PIN2, 255);
 }
