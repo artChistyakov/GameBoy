@@ -6,6 +6,11 @@ GameBoy gb;
 int paddleX = 3;
 int paddleY = 14;
 
+int ballX = 4;
+int ballY = 13;
+int directionX = 1;
+int directionY = -1;
+
 void setup() {
   gb.begin(0);
 }
@@ -27,10 +32,26 @@ void makePaddle() {
   }
 }
 
+void checkCollision() {
+  if (ballX <= 0 || ballX >= 7) directionX = -directionX;
+  if (ballY <= 0 || ballY >= 15) directionY = -directionY;
+
+  if (ballY == paddleY - 1 && ballX >= paddleX && ballX <= paddleX + 3) {
+    directionY = -1;
+  }
+}
+
+void ball() {
+  ballX += directionX;
+  ballY += directionY;
+  checkCollision();
+  gb.drawPoint(ballX, ballY);
+}
+
 void loop() {
-  makePaddle();                           
-  gb.drawDisplay();                        
-  drawPaddle(paddle, paddleX, paddleY);   
-  
-  delay(500); 
+  gb.drawDisplay();
+  ball();
+  makePaddle();
+  drawPaddle(paddle, paddleX, paddleY);
+  delay(200); 
 }
